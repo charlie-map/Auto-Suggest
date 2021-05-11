@@ -60,6 +60,15 @@ function min(args) {
 	return lowest;
 }
 
+function max(args) {
+	let max = args[0];
+	for (let i = 0; i < args.length; i++) {
+		if (args[i].load > max.load)
+			max = args[i];
+	}
+	return max;
+}
+
 function dist(compare1, compare2) {
 	let word_array = build_array(compare1, compare2);
 
@@ -86,20 +95,20 @@ function printMultiArray(arr) {
 	}
 }
 
-function quicksort(array, low, high) {
+function quicksort(array, low, high, sort) {
 	if (low < high) {
-		let pivot = partition(array, low, high);
-		quicksort(array, pivot + 1, high);
-		quicksort(array, low, pivot - 1);
+		let pivot = partition(array, low, high, sort);
+		quicksort(array, pivot + 1, high, sort);
+		quicksort(array, low, pivot - 1, sort);
 	}
 	return;
 }
 
-function partition(array, low, pivot) {
+function partition(array, low, pivot, sort) {
 	let lowest = low - 1;
 	let buffer;
 	for (let j = low; j < pivot; j++) {
-		if (array[j].load > array[pivot].load) {
+		if (array[j][sort] > array[pivot][sort]) {
 			lowest++;
 			buffer = array[lowest];
 			array[lowest] = array[j];
@@ -119,20 +128,26 @@ function partition(array, low, pivot) {
 */
 function auto_complete(trie_level, build_word) {
 	// loop and find highest load value
-	let highest_load = 0;
-	let highest_pos = -1;
-	for (let i = 0; i < trie_level.childs.length; i++) {
-		if (trie_level.childs[i] && trie_level.childs[i].load > highest_load) {
-			highest_load = trie_level.childs[i].load;
-			highest_pos = i;
-		}
-	}
-	
-	if (trie_level.childs[highest_pos].finished)
-		return [build_word, trie_level.childs[highest_pos].finished];
+	let best_suggests = [];
+	if (trie_level.finished)
+		best_suggests.push({
+			word: build_word,
+			load: trie_level.finished
+		});
 
-	let args = auto_complete(trie_level.childs[highest_pos], build_word + String.fromCharCode(highest_pos + 97));
-	return args;
+	if (!trie_level.childs.length)
+		return {
+			word: build_word,
+			load: trie_level.finished
+		};
+	for (let i = 0; i < trie_level.childs.length; i++) {
+		if (trie_level.childs[i]) best_suggests.push(auto_complete(trie_level.childs[i], build_word + String.fromCharCode(i + 97)));
+		// take this and find the correct location in the best_suggests	}
+	}
+
+	quicksort(best_suggests, 0, best_suggests.length - 1, "load");
+	// splice and caryy back the best ones
+	return best_suggests[0];
 }
 
 /* Function suggest:
@@ -150,16 +165,9 @@ function suggest(trie_level, word, word_position, build_word, build_dist) {
 	if (build_dist >= 2)
 		return []; // dud track
 
-	if (build_word=="piz") console.log("rolling", build_dist);
-	if (word_position >= word.length && !trie_level.finished) {
+	if (word_position >= word.length - 1)
 		// start searching for a auto-complete
-		if (build_word =="piz") console.log("auto complete");
-		let args = auto_complete(trie_level, build_word);
-		return [{
-			word: args[0],
-			load: args[1]
-		}];
-	}
+		return [auto_complete(trie_level, build_word)];
 
 	// difference between the two current words is less than 2
 	if (Math.abs(word.length - build_word.length) < 2 && trie_level.finished) { // return
@@ -173,15 +181,27 @@ function suggest(trie_level, word, word_position, build_word, build_dist) {
 	// we can try a certain amount of levels - until the first two letters are off we can continue looking
 	let all_suggests = [];
 	for (let check_children = 0; check_children < trie_level.childs.length; check_children++) {
-		all_suggests = trie_level.childs[check_children] ? [...all_suggests, ...suggest(trie_level.childs[check_children], word, word_position + 1, build_word + String.fromCharCode(check_children + 97), build_dist + (word[word_position] == String.fromCharCode(check_children + 97) ? 0 : 1))] : all_suggests;
+		all_suggests = trie_level.childs[check_children] ? [...all_suggests, ...suggest(trie_level.childs[check_children], word, word_position + 1, build_word + String.fromCharCode(check_children + 97),
+			build_dist + ((word[word_position] == String.fromCharCode(check_children + 97) || (word[word_position - 1] == String.fromCharCode(check_children + 97) || 
+				word[word_position + 1] == String.fromCharCode(check_children + 97))) ? 0 : 1))] : all_suggests;
 	}
-	if (build_word.length == 0 && all_suggests.length)
-		quicksort(all_suggests, 0, all_suggests.length - 1);
+	if (build_word.length == 0 && all_suggests.length) {
+		for (let i = 0; i < all_suggests.length; i++) {
+			all_suggests[i].dist = dist(word, all_suggests[i].word.substring(0, word.length));
+			all_suggests[i].signifigance = all_suggests[i].load - all_suggests[i].dist;
+		}
+		quicksort(all_suggests, 0, all_suggests.length - 1, "signifigance");
+		all_suggests = all_suggests.splice(0, 5);
+	}
 	return all_suggests;
 }
 
-let answers = suggest(trie, "piz", 0, "", 0);
+let millis = new Date().getTime();
+let answers = suggest(trie, "panin", 0, "", 0);
+// narrow down even more
+console.log("time", new Date().getTime() - millis)
 
+console.log("\n");
 for (let i = 0; i < answers.length; i++) {
-	console.log(i, answers[i]);
+	console.log("answer of WORD:", answers[i].word, "with SIGNIFIGANCE:", answers[i].signifigance, "where load is", answers[i].load, "and dist is", answers[i].dist);
 }

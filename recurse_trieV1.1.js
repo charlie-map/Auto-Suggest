@@ -51,8 +51,40 @@ function build_array(word1, word2) {
 	return return_array;
 }
 
+/* Function new_array:
+	inputs: curr_array - the current array of the word
+			full_word - the word that runs along the x-axis
+			new_char - the character that we are adding onto the array
+	the thought: add a new row onto the curr_array
+	output: new_array - new built row
+*/
+function new_array(curr_array, full_word, new_char) {
+	let pre_add_row = curr_array[0].length - 1;
+	curr_array[0].push(pre_add_row + 1);
+	console.log("\narray");
+	printMultiArray(curr_array);
+	for (let x = 1; x < full_word.length + 1; x++) {
+		console.log("\nrunning", x, pre_add_row, full_word[x - 1] == new_char);
+		printMultiArray(curr_array);
+		console.log("with min", curr_array[x - 1][pre_add_row], curr_array[x][pre_add_row - 1], curr_array[x - 1][pre_add_row - 1], (curr_array[x - 2] && curr_array[x - 2][pre_add_row - 2]) ? curr_array[x - 2][pre_add_row - 2] : 100000);
+		curr_array[x].push(full_word[x - 1] == new_char ? min([curr_array[x - 1][pre_add_row], curr_array[x][pre_add_row - 1],
+				curr_array[x - 1][pre_add_row - 1], (curr_array[x - 2] && curr_array[x - 2][pre_add_row - 2]) ? curr_array[x - 2][pre_add_row - 2] : 100000
+			]) :
+			1 + min([curr_array[x - 1][pre_add_row], curr_array[x][pre_add_row - 1],
+				curr_array[x - 1][pre_add_row - 1], (curr_array[x - 2] && curr_array[x - 2][pre_add_row - 2]) ? curr_array[x - 2][pre_add_row - 2] : 100000
+			]));
+		console.log(curr_array[x]);
+	}
+	printMultiArray(curr_array);
+	return;
+}
+
+// for (let x = 0, y = 0; x < 10; x += y == 9 ? 1 : 0, y = y == 9 ? 0 : y + 1) {
+// 	console.log(x, y);
+// }
+
 function min(args) {
-	let lowest = 10000;
+	let lowest = args[0];
 	for (let i = 0; i < args.length; i++) {
 		if (args[i] < lowest && args[i] != -1)
 			lowest = args[i];
@@ -83,7 +115,8 @@ function dist(compare1, compare2) {
 			]);
 		}
 	}
-	return word_array[word_array.length - 1][word_array[0].length - 1];
+	return word_array;
+	//word_array[word_array.length - 1][word_array[0].length - 1];
 }
 
 function printMultiArray(arr) {
@@ -126,24 +159,25 @@ function partition(array, low, pivot, sort) {
 			build_word - the current word we are building off of
 	output: auto_suggests - an array of best suggestion with it's finished value
 */
-function auto_complete(trie_level, build_word) {
+function auto_complete(trie_level, build_word, build_dist) {
 	// loop and find highest load value
 	let best_suggests = [];
 	if (trie_level.finished)
 		best_suggests.push({
 			word: build_word,
-			load: trie_level.finished
+			load: trie_level.finished,
+			dist: build_dist
 		});
 
 	if (!trie_level.childs.length)
 		return {
 			word: build_word,
-			load: trie_level.finished
+			load: trie_level.finished,
+			dist: build_dist
 		};
-	for (let i = 0; i < trie_level.childs.length; i++) {
-		if (trie_level.childs[i]) best_suggests.push(auto_complete(trie_level.childs[i], build_word + String.fromCharCode(i + 97)));
-		// take this and find the correct location in the best_suggests	}
-	}
+	for (let i = 0; i < trie_level.childs.length; i++)
+		if (trie_level.childs[i]) best_suggests.push(auto_complete(trie_level.childs[i], build_word + String.fromCharCode(i + 97), build_dist));
+	// take this and find the correct location in the best_suggests	}
 
 	quicksort(best_suggests, 0, best_suggests.length - 1, "load");
 	// splice and caryy back the best ones
@@ -154,54 +188,57 @@ function auto_complete(trie_level, build_word) {
 	inputs: trie_level - the recurring trie going deeper each call
 			word - the current word, looking for close matches
 			word_position - where we are within the word
+			build_word - rolling word: as you go down the trie, the word builds up
+			build_dist - rolling distance: as you go down the trie, the distance adds up
 
 		Start running through words to find good suggestions
 		if we're at the end of the current word, start looking for the most weighted suggestion below that
 
 	output: top suggested words
 */
-function suggest(trie_level, word, word_position, build_word, build_dist) {
+function suggest(trie_level, word, word_position, build_word, build_array) {
+	//console.log(word, build_word, build_dist);
 	// first check and make sure this path is okay
-	if (build_dist >= 2)
+	let curr_dist = build_array[build_array.length - 1][build_array[0].length - 1];
+	if (curr_dist > 2)
 		return []; // dud track
 
 	if (word_position >= word.length - 1)
 		// start searching for a auto-complete
-		return [auto_complete(trie_level, build_word)];
+		return [auto_complete(trie_level, build_word, curr_dist)];
 
 	// difference between the two current words is less than 2
-	if (Math.abs(word.length - build_word.length) < 2 && trie_level.finished) { // return
+	if (Math.abs(word.length - build_word.length) < 2 && trie_level.finished) // return
 		return [{
 			word: build_word,
-			load: trie_level.finished
+			load: trie_level.finished,
+			dist: curr_dist // grab bottom right distance
 		}];
-	}
 
 	// otherwise start looking for good paths to travel down
 	// we can try a certain amount of levels - until the first two letters are off we can continue looking
 	let all_suggests = [];
-	for (let check_children = 0; check_children < trie_level.childs.length; check_children++) {
-		all_suggests = trie_level.childs[check_children] ? [...all_suggests, ...suggest(trie_level.childs[check_children], word, word_position + 1, build_word + String.fromCharCode(check_children + 97),
-			build_dist + ((word[word_position] == String.fromCharCode(check_children + 97) || (word[word_position - 1] == String.fromCharCode(check_children + 97) || 
-				word[word_position + 1] == String.fromCharCode(check_children + 97))) ? 0 : 1))] : all_suggests;
-	}
+	for (let check_children = 0; check_children < trie_level.childs.length; check_children++)
+		all_suggests = trie_level.childs[check_children] ? [...all_suggests, ...suggest(trie_level.childs[check_children], word, word_position + 1, build_word + String.fromCharCode(check_children + 97), [...build_array, ...new_array(build_array, word, String.fromCharCode(check_children + 97)) /*a new column of the table*/ ])] : all_suggests;
+
 	if (build_word.length == 0 && all_suggests.length) {
-		for (let i = 0; i < all_suggests.length; i++) {
-			all_suggests[i].dist = dist(word, all_suggests[i].word.substring(0, word.length));
-			all_suggests[i].signifigance = all_suggests[i].load - all_suggests[i].dist;
-		}
+		for (let i = 0; i < all_suggests.length; i++)
+			all_suggests[i].signifigance = all_suggests[i].load - (all_suggests[i].dist * 3);
 		quicksort(all_suggests, 0, all_suggests.length - 1, "signifigance");
 		all_suggests = all_suggests.splice(0, 5);
 	}
 	return all_suggests;
 }
 
-let millis = new Date().getTime();
-let answers = suggest(trie, "panin", 0, "", 0);
+let word = "pani";
+arr = dist(word, "pe");
+printMultiArray(arr);
+//let answers = suggest(trie, word, 0, "", build_array(word, ""));
+arr = new_array(arr, word, "n");
+console.log(arr);
 // narrow down even more
-console.log("time", new Date().getTime() - millis)
 
-console.log("\n");
-for (let i = 0; i < answers.length; i++) {
-	console.log("answer of WORD:", answers[i].word, "with SIGNIFIGANCE:", answers[i].signifigance, "where load is", answers[i].load, "and dist is", answers[i].dist);
-}
+// console.log("\n");
+// for (let i = 0; i < answers.length; i++) {
+// 	console.log("answer of WORD:", answers[i].word, "with SIGNIFIGANCE:", answers[i].signifigance, "where load is", answers[i].load, "and dist is", answers[i].dist);
+// }

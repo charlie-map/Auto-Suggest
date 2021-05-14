@@ -61,22 +61,11 @@ function build_array(word1, word2) {
 function new_array(curr_array, full_word, new_char) {
 	let pre_add_row = curr_array[0].length - 1;
 	curr_array[0].push(pre_add_row + 1);
-	console.log("\narray");
-	printMultiArray(curr_array);
-	for (let x = 1; x < full_word.length + 1; x++) {
-		console.log("\nrunning", x, pre_add_row, full_word[x - 1] == new_char);
-		printMultiArray(curr_array);
-		console.log("with min", curr_array[x - 1][pre_add_row], curr_array[x][pre_add_row - 1], curr_array[x - 1][pre_add_row - 1], (curr_array[x - 2] && curr_array[x - 2][pre_add_row - 2]) ? curr_array[x - 2][pre_add_row - 2] : 100000);
-		curr_array[x].push(full_word[x - 1] == new_char ? min([curr_array[x - 1][pre_add_row], curr_array[x][pre_add_row - 1],
-				curr_array[x - 1][pre_add_row - 1], (curr_array[x - 2] && curr_array[x - 2][pre_add_row - 2]) ? curr_array[x - 2][pre_add_row - 2] : 100000
-			]) :
-			1 + min([curr_array[x - 1][pre_add_row], curr_array[x][pre_add_row - 1],
-				curr_array[x - 1][pre_add_row - 1], (curr_array[x - 2] && curr_array[x - 2][pre_add_row - 2]) ? curr_array[x - 2][pre_add_row - 2] : 100000
-			]));
-		console.log(curr_array[x]);
-	}
-	printMultiArray(curr_array);
-	return;
+	for (let x = 1; x < full_word.length + 1; x++)
+		curr_array[x].push((full_word[x - 1] == new_char ? 0 : 1) + min([curr_array[x - 1][pre_add_row], curr_array[x][pre_add_row],
+			curr_array[x - 1][pre_add_row + 1], (curr_array[x - 2] && curr_array[x - 2][pre_add_row - 1]) ? curr_array[x - 2][pre_add_row - 1] : 100000]));
+
+	return curr_array;
 }
 
 // for (let x = 0, y = 0; x < 10; x += y == 9 ? 1 : 0, y = y == 9 ? 0 : y + 1) {
@@ -166,22 +155,26 @@ function auto_complete(trie_level, build_word, build_dist) {
 		best_suggests.push({
 			word: build_word,
 			load: trie_level.finished,
-			dist: build_dist
+			dist: build_dist,
+			signifigance: trie_level.finished - (build_dist * 3)
 		});
 
 	if (!trie_level.childs.length)
-		return {
+		return [{
 			word: build_word,
 			load: trie_level.finished,
-			dist: build_dist
-		};
+			dist: build_dist,
+			signifigance: trie_level.finished - (build_dist * 3)
+		}];
+
 	for (let i = 0; i < trie_level.childs.length; i++)
-		if (trie_level.childs[i]) best_suggests.push(auto_complete(trie_level.childs[i], build_word + String.fromCharCode(i + 97), build_dist));
+		if (trie_level.childs[i])
+			best_suggests.push(...auto_complete(trie_level.childs[i], build_word + String.fromCharCode(i + 97), build_dist));
 	// take this and find the correct location in the best_suggests	}
 
 	quicksort(best_suggests, 0, best_suggests.length - 1, "load");
-	// splice and caryy back the best ones
-	return best_suggests[0];
+	// splice and carry back the best ones
+	return best_suggests.splice(0, 5);
 }
 
 /* Function suggest:
@@ -200,26 +193,35 @@ function suggest(trie_level, word, word_position, build_word, build_array) {
 	//console.log(word, build_word, build_dist);
 	// first check and make sure this path is okay
 	let curr_dist = build_array[build_array.length - 1][build_array[0].length - 1];
-	if (curr_dist > 2)
+	console.log("\n\n", word, build_word, curr_dist);
+	printMultiArray(build_array);
+	if (word.length <= 2) {
+		if (build_word != word) return suggest(trie_level.childs[word.charCodeAt(build_word.length) - 97], word, word_position + 1, build_word + word[build_word.length], new_array(build_array, word, word[build_word.length]));
+		return [...auto_complete(trie_level, word, curr_dist)];
+	}
+
+	if (curr_dist > 3 && Math.abs(word.length - build_word.length) < 3){
 		return []; // dud track
+	}
 
 	if (word_position >= word.length - 1)
 		// start searching for a auto-complete
 		return [auto_complete(trie_level, build_word, curr_dist)];
 
 	// difference between the two current words is less than 2
-	if (Math.abs(word.length - build_word.length) < 2 && trie_level.finished) // return
+	if (Math.abs(word.length - build_word.length) < 2 && trie_level.finished) { // return
 		return [{
 			word: build_word,
 			load: trie_level.finished,
 			dist: curr_dist // grab bottom right distance
 		}];
+	}
 
 	// otherwise start looking for good paths to travel down
 	// we can try a certain amount of levels - until the first two letters are off we can continue looking
 	let all_suggests = [];
 	for (let check_children = 0; check_children < trie_level.childs.length; check_children++)
-		all_suggests = trie_level.childs[check_children] ? [...all_suggests, ...suggest(trie_level.childs[check_children], word, word_position + 1, build_word + String.fromCharCode(check_children + 97), [...build_array, ...new_array(build_array, word, String.fromCharCode(check_children + 97)) /*a new column of the table*/ ])] : all_suggests;
+		all_suggests = trie_level.childs[check_children] ? [...all_suggests, ...suggest(trie_level.childs[check_children], word, word_position + 1, build_word + String.fromCharCode(check_children + 97), build_array[0].length != build_array.length ? new_array(build_array, word, String.fromCharCode(check_children + 97)) : build_array)] : all_suggests;
 
 	if (build_word.length == 0 && all_suggests.length) {
 		for (let i = 0; i < all_suggests.length; i++)
@@ -230,15 +232,13 @@ function suggest(trie_level, word, word_position, build_word, build_array) {
 	return all_suggests;
 }
 
-let word = "pani";
-arr = dist(word, "pe");
-printMultiArray(arr);
-//let answers = suggest(trie, word, 0, "", build_array(word, ""));
-arr = new_array(arr, word, "n");
-console.log(arr);
+let word = "pan";
+//printMultiArray(build_array(word, ""));
+let answers = suggest(trie, word, 0, "", build_array(word, ""));
 // narrow down even more
+//let arr = dist(word, "p");
 
-// console.log("\n");
-// for (let i = 0; i < answers.length; i++) {
-// 	console.log("answer of WORD:", answers[i].word, "with SIGNIFIGANCE:", answers[i].signifigance, "where load is", answers[i].load, "and dist is", answers[i].dist);
-// }
+console.log("\n");
+for (let i = 0; i < answers.length; i++) {
+	console.log("answer of WORD: |" + answers[i].word + "|with SIGNIFIGANCE:", answers[i].signifigance, "where load is", answers[i].load, "and dist is", answers[i].dist);
+}
